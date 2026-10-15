@@ -13,7 +13,7 @@ struct Particle {
     float y;
     float vx;
     float vy;
-    float life;      // 1.0 -> 0.0
+    float life;
     float maxLife;
     float size;
     QColor color;
@@ -24,7 +24,7 @@ struct FloatingText {
     float x;
     float y;
     float vy;
-    float life;      // 1.0 -> 0.0
+    float life;
     QColor color;
     int fontSize;
 };
@@ -63,10 +63,11 @@ protected:
     void timerEvent(QTimerEvent *event) override;
 
 private slots:
-    void onAnimationFrame(); // Bucle a 60 FPS para partículas, sacudida y animaciones
+    void onAnimationFrame(); // Bucle a 60 FPS
 
 private:
     bool tryMove(const Piece &newPiece, int newX, int newY, int newRotation);
+    bool isGrounded() const;
     void lockPiece();
     void checkLines();
     void finalizeLineClear();
@@ -75,14 +76,31 @@ private:
     void hardDrop();
     int getDropInterval() const;
 
+    // Algoritmo 7-Bag Randomizer
+    void refillBag(bool isFirstBag);
+    TetrominoType takeFromBag();
+
+    // Lock Delay (Tiempo de gracia al tocar suelo)
+    void resetLockDelayIfGrounded();
+    static constexpr float LockDelayMaxMs = 500.0f;
+    static constexpr int LockMaxMoves = 15;
+    bool m_isLocking{false};
+    float m_lockTimerMs{0.0f};
+    int m_lockMoveCount{0};
+
+    // Cuenta regresiva de inicio
+    bool m_isCountingDown{false};
+    float m_countdownMs{0.0f};
+    int m_countdownStep{3}; // 3, 2, 1, 0 (GO)
+
     // Efectos visuales
     void triggerScreenShake(float intensity);
     void spawnParticlesAt(float x, float y, const QColor &color, int count, float speed);
     void addFloatingText(const QString &text, float x, float y, const QColor &color, int size = 16);
 
     // Relojes
-    QBasicTimer m_dropTimer; // Maneja la gravedad / caída del juego
-    QTimer m_animTimer;      // 60 FPS para fluidez visual
+    QBasicTimer m_dropTimer;
+    QTimer m_animTimer;
 
     // Estado de juego
     bool m_isStarted{false};
@@ -99,18 +117,21 @@ private:
     Piece m_holdPiece;
     bool m_canHold{true};
 
-    // Matriz del tablero [fila][columna]
+    // Bolsa de 7 piezas
+    std::vector<TetrominoType> m_bag;
+
+    // Tablero [fila][columna]
     std::array<std::array<TetrominoType, BoardWidth>, BoardHeight> m_board;
 
-    // Sistema de animación de limpieza de líneas
+    // Animación de líneas
     bool m_isClearingAnimation{false};
-    float m_clearAnimProgress{0.0f}; // 0.0 a 1.0
+    float m_clearAnimProgress{0.0f};
     std::vector<int> m_animatingRows;
 
-    // Screen Shake (sacudida de pantalla en impactos)
+    // Screen Shake
     float m_shakeIntensity{0.0f};
 
-    // Partículas y textos flotantes
+    // Partículas y textos
     std::vector<Particle> m_particles;
     std::vector<FloatingText> m_floatingTexts;
 };

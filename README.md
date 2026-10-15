@@ -8,6 +8,9 @@ Una implementación moderna, fluida y multiplataforma del clásico **Tetris** de
 
 * **Paleta Pastel Minimalista:** Diseño limpio y moderno con tonos pastel suaves que no cansan la vista.
 * **Fluidez a 60 FPS:** Motor de renderizado desacoplado de la velocidad de caída para animaciones ultrasuaves.
+* **Algoritmo 7-Bag Randomizer:** Generación oficial mediante bolsas de 7 piezas barajadas con regla de inicio limpio (la primera pieza nunca será S, Z ni O).
+* **Lock Delay (500 ms):** Tiempo de gracia al tocar el suelo para poder deslizar y rotar la pieza antes de fijarse.
+* **Cuenta Regresiva de Inicio:** Animación de preparación `3... 2... 1... ¡GO!` al comenzar la partida.
 * **Mecánica HOLD (Guardar pieza):** Guarda la pieza actual o intercámbiala en cualquier momento con `C` o `Shift`.
 * **Proyección Fantasma (*Ghost Piece*):** Guía visual punteada que indica la posición exacta de impacto.
 * **Efectos de Impacto (*Juice*):**

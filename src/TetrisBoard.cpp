@@ -12,17 +12,61 @@ TetrisBoard::TetrisBoard(QWidget *parent)
     setFocusPolicy(Qt::StrongFocus);
     setFixedSize(BoardWidth * BlockSize, BoardHeight * BlockSize);
 
-    // Cargar puntuación máxima guardada en el sistema
     QSettings settings("TetrisQt6", "TetrisGame");
     m_highScore = settings.value("highScore", 0).toInt();
 
-    // Iniciar temporizador de animación a 60 FPS (~16ms)
     connect(&m_animTimer, &QTimer::timeout, this, &TetrisBoard::onAnimationFrame);
     m_animTimer.start(16);
 
     for (auto &row : m_board) {
         row.fill(TetrominoType::None);
     }
+}
+
+void TetrisBoard::refillBag(bool isFirstBag) {
+    m_bag = {
+        TetrominoType::I,
+        TetrominoType::J,
+        TetrominoType::L,
+        TetrominoType::O,
+        TetrominoType::S,
+        TetrominoType::T,
+        TetrominoType::Z
+    };
+
+    // Algoritmo de barajado Fisher-Yates uniforme
+    auto *rng = QRandomGenerator::global();
+    for (size_t i = m_bag.size() - 1; i > 0; --i) {
+        size_t j = rng->bounded(static_cast<quint32>(i + 1));
+        std::swap(m_bag[i], m_bag[j]);
+    }
+
+    // Regla de inicio limpio para la primera sección:
+    // Nunca iniciar con S, Z ni O. Siempre iniciar con I, J, L o T
+    if (isFirstBag) {
+        auto isGoodStart = [](TetrominoType t) {
+            return t == TetrominoType::I || t == TetrominoType::J ||
+                   t == TetrominoType::L || t == TetrominoType::T;
+        };
+
+        if (!isGoodStart(m_bag.front())) {
+            for (size_t i = 1; i < m_bag.size(); ++i) {
+                if (isGoodStart(m_bag[i])) {
+                    std::swap(m_bag[0], m_bag[i]);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+TetrominoType TetrisBoard::takeFromBag() {
+    if (m_bag.empty()) {
+        refillBag(false);
+    }
+    TetrominoType type = m_bag.front();
+    m_bag.erase(m_bag.begin());
+    return type;
 }
 
 void TetrisBoard::start() {
@@ -38,6 +82,9 @@ void TetrisBoard::start() {
     m_floatingTexts.clear();
     m_isClearingAnimation = false;
     m_animatingRows.clear();
+    m_isLocking = false;
+    m_lockTimerMs = 0.0f;
+    m_lockMoveCount = 0;
 
     for (auto &row : m_board) {
         row.fill(TetrominoType::None);
@@ -49,15 +96,20 @@ void TetrisBoard::start() {
     emit levelChanged(m_level);
     emit holdPieceChanged(m_holdPiece);
 
-    m_nextPiece = Piece::getRandomPiece();
+    // Inicializar la bolsa con la regla de primera sección
+    refillBag(true);
+    m_nextPiece = Piece(takeFromBag());
     spawnPiece();
 
-    m_dropTimer.start(getDropInterval(), this);
-    addFloatingText("¡LISTO! A JUGAR", width() / 2.0f, height() / 2.0f, QColor(0, 240, 240), 20);
+    // Iniciar cuenta regresiva 3... 2... 1... GO!
+    m_isCountingDown = true;
+    m_countdownMs = 0.0f;
+    m_countdownStep = 3;
+    addFloatingText("3", width() / 2.0f, height() / 2.0f - 30, QColor(100, 215, 230), 32);
 }
 
 void TetrisBoard::pause() {
-    if (!m_isStarted || m_isGameOver) return;
+    if (!m_isStarted || m_isGameOver || m_isCountingDown) return;
 
     m_isPaused = !m_isPaused;
     if (m_isPaused) {
@@ -77,7 +129,7 @@ int TetrisBoard::getDropInterval() const {
 }
 
 void TetrisBoard::holdCurrentPiece() {
-    if (!m_canHold || !m_isStarted || m_isPaused || m_isGameOver || m_isClearingAnimation) {
+    if (!m_canHold || !m_isStarted || m_isPaused || m_isGameOver || m_isClearingAnimation || m_isCountingDown) {
         return;
     }
 
@@ -99,22 +151,28 @@ void TetrisBoard::holdCurrentPiece() {
     }
 
     m_canHold = false;
+    m_isLocking = false;
+    m_lockTimerMs = 0.0f;
+    m_lockMoveCount = 0;
     emit holdPieceChanged(m_holdPiece);
     triggerScreenShake(2.0f);
 }
 
 void TetrisBoard::spawnPiece() {
     m_currentPiece = m_nextPiece;
-    m_nextPiece = Piece::getRandomPiece();
+    m_nextPiece = Piece(takeFromBag());
     emit nextPieceChanged(m_nextPiece);
 
     m_currentPiece.setPosition(3, 0);
+    m_isLocking = false;
+    m_lockTimerMs = 0.0f;
+    m_lockMoveCount = 0;
 
     if (!tryMove(m_currentPiece, 3, 0, m_currentPiece.getRotation())) {
         m_isGameOver = true;
         m_dropTimer.stop();
-        triggerScreenShake(12.0f);
-        addFloatingText("GAME OVER", width() / 2.0f, height() / 2.0f - 20, QColor(255, 60, 60), 26);
+        triggerScreenShake(10.0f);
+        addFloatingText("GAME OVER", width() / 2.0f, height() / 2.0f - 20, QColor(250, 140, 160), 26);
         emit gameOverSignal();
     }
 }
@@ -138,18 +196,43 @@ bool TetrisBoard::tryMove(const Piece &piece, int newX, int newY, int newRotatio
     return true;
 }
 
+bool TetrisBoard::isGrounded() const {
+    return !const_cast<TetrisBoard*>(this)->tryMove(
+        m_currentPiece, m_currentPiece.getX(), m_currentPiece.getY() + 1, m_currentPiece.getRotation());
+}
+
+void TetrisBoard::resetLockDelayIfGrounded() {
+    if (isGrounded()) {
+        m_isLocking = true;
+        if (m_lockMoveCount < LockMaxMoves) {
+            m_lockTimerMs = 0.0f; // Reiniciar tiempo de gracia
+            m_lockMoveCount++;
+        }
+    } else {
+        m_isLocking = false;
+        m_lockTimerMs = 0.0f;
+    }
+}
+
 void TetrisBoard::dropStep() {
-    if (m_isClearingAnimation || m_isGameOver || m_isPaused) return;
+    if (m_isClearingAnimation || m_isGameOver || m_isPaused || m_isCountingDown) return;
 
     if (tryMove(m_currentPiece, m_currentPiece.getX(), m_currentPiece.getY() + 1, m_currentPiece.getRotation())) {
         m_currentPiece.move(0, 1);
+        m_isLocking = false;
+        m_lockTimerMs = 0.0f;
     } else {
-        lockPiece();
+        // Toca el suelo: activa el Lock Delay en vez de congelarse al instante
+        if (!m_isLocking) {
+            m_isLocking = true;
+            m_lockTimerMs = 0.0f;
+            m_lockMoveCount = 0;
+        }
     }
 }
 
 void TetrisBoard::hardDrop() {
-    if (m_isClearingAnimation || m_isGameOver || m_isPaused) return;
+    if (m_isClearingAnimation || m_isGameOver || m_isPaused || m_isCountingDown) return;
 
     int dropDistance = 0;
     while (tryMove(m_currentPiece, m_currentPiece.getX(), m_currentPiece.getY() + 1, m_currentPiece.getRotation())) {
@@ -160,15 +243,15 @@ void TetrisBoard::hardDrop() {
     if (dropDistance > 0) {
         m_score += dropDistance * 2;
         emit scoreChanged(m_score);
-        triggerScreenShake(std::min(2.0f + dropDistance * 0.4f, 8.0f));
+        triggerScreenShake(std::min(2.0f + dropDistance * 0.35f, 7.0f));
 
-        // Partículas en el fondo del impacto
         QColor col = Piece::getColorForType(m_currentPiece.getType());
         float impactY = (m_currentPiece.getY() + 3) * BlockSize;
         float impactX = (m_currentPiece.getX() + 1.5f) * BlockSize;
-        spawnParticlesAt(impactX, impactY, col, 14, 3.5f);
+        spawnParticlesAt(impactX, impactY, col, 12, 3.0f);
     }
 
+    m_isLocking = false;
     lockPiece();
 }
 
@@ -186,6 +269,9 @@ void TetrisBoard::lockPiece() {
     }
 
     m_canHold = true;
+    m_isLocking = false;
+    m_lockTimerMs = 0.0f;
+    m_lockMoveCount = 0;
     checkLines();
 }
 
@@ -210,16 +296,15 @@ void TetrisBoard::checkLines() {
         m_dropTimer.stop();
 
         int count = static_cast<int>(m_animatingRows.size());
-        float shake = (count == 4) ? 16.0f : (count * 3.5f);
+        float shake = (count == 4) ? 14.0f : (count * 3.0f);
         triggerScreenShake(shake);
 
-        // Explosión de partículas en cada fila completada
         for (int row : m_animatingRows) {
             float py = row * BlockSize + BlockSize / 2.0f;
             for (int col = 0; col < BoardWidth; ++col) {
                 float px = col * BlockSize + BlockSize / 2.0f;
                 QColor blockColor = Piece::getColorForType(m_board[row][col]);
-                spawnParticlesAt(px, py, blockColor, 6, 4.0f);
+                spawnParticlesAt(px, py, blockColor, 5, 3.5f);
             }
         }
     } else {
@@ -242,7 +327,7 @@ void TetrisBoard::finalizeLineClear() {
 
     int points = 0;
     QString popupText;
-    QColor popupColor = QColor(255, 255, 100);
+    QColor popupColor = QColor(255, 225, 130);
 
     switch (clearedCount) {
     case 1:
@@ -252,17 +337,17 @@ void TetrisBoard::finalizeLineClear() {
     case 2:
         points = 300 * m_level;
         popupText = "+300 DOBLE";
-        popupColor = QColor(0, 240, 240);
+        popupColor = QColor(100, 215, 230);
         break;
     case 3:
         points = 500 * m_level;
         popupText = "+500 TRIPLE";
-        popupColor = QColor(240, 160, 0);
+        popupColor = QColor(255, 180, 130);
         break;
     case 4:
         points = 800 * m_level;
         popupText = "¡TETRIS! +800";
-        popupColor = QColor(160, 0, 240);
+        popupColor = QColor(205, 155, 245);
         break;
     }
 
@@ -282,7 +367,7 @@ void TetrisBoard::finalizeLineClear() {
     if (newLevel != m_level) {
         m_level = newLevel;
         emit levelChanged(m_level);
-        addFloatingText("¡NIVEL " + QString::number(m_level) + "!", width() / 2.0f, height() / 3.0f, QColor(0, 255, 120), 24);
+        addFloatingText("¡NIVEL " + QString::number(m_level) + "!", width() / 2.0f, height() / 3.0f, QColor(150, 220, 175), 24);
     }
 
     m_isClearingAnimation = false;
@@ -299,9 +384,9 @@ void TetrisBoard::triggerScreenShake(float intensity) {
 void TetrisBoard::spawnParticlesAt(float x, float y, const QColor &color, int count, float speed) {
     for (int i = 0; i < count; ++i) {
         float angle = QRandomGenerator::global()->generateDouble() * 2.0 * M_PI;
-        float spd = (0.5f + QRandomGenerator::global()->generateDouble()) * speed;
-        float life = 350.0f + QRandomGenerator::global()->generateDouble() * 300.0f;
-        float size = 3.0f + QRandomGenerator::global()->generateDouble() * 3.5f;
+        float spd = (0.4f + QRandomGenerator::global()->generateDouble()) * speed;
+        float life = 300.0f + QRandomGenerator::global()->generateDouble() * 250.0f;
+        float size = 2.5f + QRandomGenerator::global()->generateDouble() * 3.0f;
 
         m_particles.push_back({
             x, y,
@@ -313,7 +398,7 @@ void TetrisBoard::spawnParticlesAt(float x, float y, const QColor &color, int co
 }
 
 void TetrisBoard::addFloatingText(const QString &text, float x, float y, const QColor &color, int size) {
-    m_floatingTexts.push_back({text, x, y, -1.2f, 1.0f, color, size});
+    m_floatingTexts.push_back({text, x, y, -1.1f, 1.0f, color, size});
 }
 
 void TetrisBoard::onAnimationFrame() {
@@ -324,7 +409,42 @@ void TetrisBoard::onAnimationFrame() {
         m_shakeIntensity = 0.0f;
     }
 
-    // 2. Progreso de animación de líneas completadas
+    // 2. Cuenta regresiva al iniciar
+    if (m_isCountingDown) {
+        m_countdownMs += 16.0f;
+        if (m_countdownMs >= 550.0f) {
+            m_countdownMs = 0.0f;
+            m_countdownStep--;
+
+            if (m_countdownStep == 2) {
+                addFloatingText("2", width() / 2.0f, height() / 2.0f - 30, QColor(135, 175, 245), 32);
+            } else if (m_countdownStep == 1) {
+                addFloatingText("1", width() / 2.0f, height() / 2.0f - 30, QColor(255, 225, 130), 32);
+            } else if (m_countdownStep == 0) {
+                addFloatingText("¡GO!", width() / 2.0f, height() / 2.0f - 30, QColor(150, 220, 175), 34);
+            } else if (m_countdownStep < 0) {
+                m_isCountingDown = false;
+                m_dropTimer.start(getDropInterval(), this);
+            }
+        }
+    }
+
+    // 3. Manejo de Lock Delay
+    if (m_isLocking && !m_isPaused && !m_isGameOver && !m_isClearingAnimation && !m_isCountingDown) {
+        if (!isGrounded()) {
+            m_isLocking = false;
+            m_lockTimerMs = 0.0f;
+        } else {
+            m_lockTimerMs += 16.0f;
+            if (m_lockTimerMs >= LockDelayMaxMs) {
+                m_isLocking = false;
+                m_lockTimerMs = 0.0f;
+                lockPiece();
+            }
+        }
+    }
+
+    // 4. Progreso de animación de líneas
     if (m_isClearingAnimation) {
         m_clearAnimProgress += 0.07f;
         if (m_clearAnimProgress >= 1.0f) {
@@ -332,11 +452,11 @@ void TetrisBoard::onAnimationFrame() {
         }
     }
 
-    // 3. Física de partículas
+    // 5. Física de partículas
     for (auto it = m_particles.begin(); it != m_particles.end();) {
         it->x += it->vx;
         it->y += it->vy;
-        it->vy += 0.15f; // Gravedad suave
+        it->vy += 0.12f;
         it->vx *= 0.98f;
         it->life -= 16.0f / it->maxLife;
 
@@ -347,10 +467,10 @@ void TetrisBoard::onAnimationFrame() {
         }
     }
 
-    // 4. Textos flotantes
+    // 6. Textos flotantes
     for (auto it = m_floatingTexts.begin(); it != m_floatingTexts.end();) {
         it->y += it->vy;
-        it->life -= 16.0f / 1000.0f; // Se desvanecen en 1 segundo
+        it->life -= 16.0f / 900.0f;
 
         if (it->life <= 0.0f) {
             it = m_floatingTexts.erase(it);
@@ -393,7 +513,7 @@ void TetrisBoard::keyPressEvent(QKeyEvent *event) {
         return;
     }
 
-    if (m_isPaused || m_isGameOver || m_isClearingAnimation) {
+    if (m_isPaused || m_isGameOver || m_isClearingAnimation || m_isCountingDown) {
         return;
     }
 
@@ -402,6 +522,7 @@ void TetrisBoard::keyPressEvent(QKeyEvent *event) {
     case Qt::Key_A:
         if (tryMove(m_currentPiece, m_currentPiece.getX() - 1, m_currentPiece.getY(), m_currentPiece.getRotation())) {
             m_currentPiece.move(-1, 0);
+            resetLockDelayIfGrounded();
         }
         break;
 
@@ -409,6 +530,7 @@ void TetrisBoard::keyPressEvent(QKeyEvent *event) {
     case Qt::Key_D:
         if (tryMove(m_currentPiece, m_currentPiece.getX() + 1, m_currentPiece.getY(), m_currentPiece.getRotation())) {
             m_currentPiece.move(1, 0);
+            resetLockDelayIfGrounded();
         }
         break;
 
@@ -418,6 +540,12 @@ void TetrisBoard::keyPressEvent(QKeyEvent *event) {
             m_currentPiece.move(0, 1);
             m_score += 1;
             emit scoreChanged(m_score);
+            resetLockDelayIfGrounded();
+        } else {
+            // Acelerar bloqueo si el jugador insiste en bajar estando en el suelo
+            if (m_isLocking) {
+                m_lockTimerMs += 100.0f;
+            }
         }
         break;
 
@@ -426,12 +554,15 @@ void TetrisBoard::keyPressEvent(QKeyEvent *event) {
         int nextRot = (m_currentPiece.getRotation() + 1) % 4;
         if (tryMove(m_currentPiece, m_currentPiece.getX(), m_currentPiece.getY(), nextRot)) {
             m_currentPiece.rotateClockwise();
+            resetLockDelayIfGrounded();
         } else if (tryMove(m_currentPiece, m_currentPiece.getX() - 1, m_currentPiece.getY(), nextRot)) {
             m_currentPiece.move(-1, 0);
             m_currentPiece.rotateClockwise();
+            resetLockDelayIfGrounded();
         } else if (tryMove(m_currentPiece, m_currentPiece.getX() + 1, m_currentPiece.getY(), nextRot)) {
             m_currentPiece.move(1, 0);
             m_currentPiece.rotateClockwise();
+            resetLockDelayIfGrounded();
         }
         break;
     }
@@ -449,10 +580,8 @@ void TetrisBoard::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    // Fondo plano suave y moderno
     painter.fillRect(rect(), QColor(22, 24, 34));
 
-    // Aplicar Screen Shake suave
     painter.save();
     if (m_shakeIntensity > 0.0f) {
         float shakeX = (QRandomGenerator::global()->generateDouble() * 2.0f - 1.0f) * m_shakeIntensity;
@@ -460,7 +589,6 @@ void TetrisBoard::paintEvent(QPaintEvent *) {
         painter.translate(shakeX, shakeY);
     }
 
-    // Cuadrícula plana sutil
     painter.setPen(QPen(QColor(34, 38, 52), 1));
     for (int x = 0; x <= BoardWidth; ++x) {
         painter.drawLine(x * BlockSize, 0, x * BlockSize, BoardHeight * BlockSize);
@@ -469,30 +597,33 @@ void TetrisBoard::paintEvent(QPaintEvent *) {
         painter.drawLine(0, y * BlockSize, BoardWidth * BlockSize, y * BlockSize);
     }
 
-    // Dibujado plano con colores pastel
-    auto drawBlock = [&](int x, int y, QColor color, float alpha = 1.0f, bool isGhost = false) {
+    auto drawBlock = [&](int x, int y, QColor color, float alpha = 1.0f, bool isGhost = false, bool isLockingPulse = false) {
         float px = x * BlockSize;
         float py = y * BlockSize;
         QRectF bRect(px + 2, py + 2, BlockSize - 4, BlockSize - 4);
 
         if (isGhost) {
             QColor ghostColor = color;
-            ghostColor.setAlphaF(0.7f);
+            ghostColor.setAlphaF(0.6f);
             painter.setPen(QPen(ghostColor, 1.5, Qt::DashLine));
-            painter.setBrush(QColor(color.red(), color.green(), color.blue(), 30));
+            painter.setBrush(QColor(color.red(), color.green(), color.blue(), 25));
             painter.drawRoundedRect(bRect, 5, 5);
         } else {
             QColor c = color;
+            if (isLockingPulse) {
+                // Pulso sutil cuando está en período de gracia de bloqueo
+                float pulse = 0.5f + 0.5f * std::sin(m_lockTimerMs * 0.025f);
+                c = c.lighter(static_cast<int>(100 + pulse * 25));
+            }
             c.setAlphaF(std::clamp(alpha, 0.0f, 1.0f));
 
-            // Color plano pastel con borde sutil
             painter.setPen(QPen(c.darker(118), 1.2));
             painter.setBrush(c);
             painter.drawRoundedRect(bRect, 5, 5);
         }
     };
 
-    // 1. Dibujar bloques colocados en el tablero
+    // 1. Dibujar bloques colocados
     for (int r = 0; r < BoardHeight; ++r) {
         bool isClearingRow = std::find(m_animatingRows.begin(), m_animatingRows.end(), r) != m_animatingRows.end();
 
@@ -540,13 +671,13 @@ void TetrisBoard::paintEvent(QPaintEvent *) {
                 if (m_currentPiece.isBlockAt(r, c)) {
                     int x = m_currentPiece.getX() + c;
                     int y = m_currentPiece.getY() + r;
-                    if (y >= 0) drawBlock(x, y, pieceColor, 1.0f, false);
+                    if (y >= 0) drawBlock(x, y, pieceColor, 1.0f, false, m_isLocking);
                 }
             }
         }
     }
 
-    // 3. Dibujar partículas (puntos pastel suaves)
+    // 3. Partículas
     for (const auto &p : m_particles) {
         painter.setPen(Qt::NoPen);
         QColor pc = p.color;
@@ -555,7 +686,7 @@ void TetrisBoard::paintEvent(QPaintEvent *) {
         painter.drawEllipse(QPointF(p.x, p.y), p.size * p.life, p.size * p.life);
     }
 
-    // 4. Dibujar textos flotantes
+    // 4. Textos flotantes
     for (const auto &ft : m_floatingTexts) {
         QFont font = painter.font();
         font.setPointSize(ft.fontSize);
@@ -574,7 +705,7 @@ void TetrisBoard::paintEvent(QPaintEvent *) {
 
     painter.restore();
 
-    // 5. Pantallas de superposición (Inicio / Pausa / Game Over)
+    // 5. Pantallas de Inicio / Pausa / Game Over
     if (!m_isStarted || m_isPaused || m_isGameOver) {
         painter.fillRect(rect(), QColor(14, 16, 24, 210));
 
