@@ -1,0 +1,38 @@
+# Build artifacts
+build/
+bin/
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+*.a
+*.lib
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+*.ninja
+.ninja_*
+
+# Qt MOC / UIC / RCC
+*_autogen/
+*.moc
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+*.kdev4
+*.creator
+*.creator.user*
