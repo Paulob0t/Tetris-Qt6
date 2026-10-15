@@ -32,7 +32,14 @@ public:
     return isBlockAt(row, col, m_rotation);
   }
 
+  // Paleta clásica pastel (7 colores)
   static QColor getColorForType(TetrominoType type);
+
+  // Paleta de arena (4 colores de alto contraste para facilitar conexiones)
+  static uint8_t getSandColorId(TetrominoType type);
+  static QColor getSandColorForType(TetrominoType type);
+  static QColor getSandColorById(uint8_t colorId);
+
   static Piece getRandomPiece();
 
 private:

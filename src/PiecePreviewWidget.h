@@ -18,6 +18,11 @@ public slots:
         update();
     }
 
+    void setSandMode(bool sandMode) {
+        m_sandMode = sandMode;
+        update();
+    }
+
     void clear() {
         m_piece = Piece(TetrominoType::None);
         update();
@@ -28,10 +33,7 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
 
-        // Fondo plano suave
         painter.fillRect(rect(), QColor(26, 28, 38));
-
-        // Borde plano limpio
         painter.setPen(QPen(QColor(48, 52, 70), 1.5));
         painter.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 8, 8);
 
@@ -41,9 +43,9 @@ protected:
         int offsetX = (width() - 4 * blockSize) / 2;
         int offsetY = (height() - 4 * blockSize) / 2;
 
-        QColor color = Piece::getColorForType(m_piece.getType());
+        QColor color = m_sandMode ? Piece::getSandColorForType(m_piece.getType())
+                                  : Piece::getColorForType(m_piece.getType());
 
-        // Centrado específico para O e I
         if (m_piece.getType() == TetrominoType::O) {
             offsetX += blockSize / 2;
         } else if (m_piece.getType() == TetrominoType::I) {
@@ -58,7 +60,6 @@ protected:
 
                     QRectF blockRect(px + 1.5, py + 1.5, blockSize - 3, blockSize - 3);
 
-                    // Color pastel plano sin gradientes
                     painter.setPen(QPen(color.darker(115), 1.2));
                     painter.setBrush(color);
                     painter.drawRoundedRect(blockRect, 4, 4);
@@ -69,4 +70,5 @@ protected:
 
 private:
     Piece m_piece;
+    bool m_sandMode{false};
 };

@@ -214,14 +214,22 @@ MainWindow::MainWindow(QWidget *parent)
 
     rightLayout->addStretch();
 
-    m_restartButton = new QPushButton("Reiniciar (R)", rightPanel);
+    m_restartButton = new QPushButton("Iniciar / Reiniciar (R)", rightPanel);
     m_restartButton->setObjectName("restartBtn");
     connect(m_restartButton, &QPushButton::clicked, [this]() {
         if (m_isSandMode) {
-            m_sandBoard->restart();
+            if (!m_sandBoard->isStarted() || m_sandBoard->isGameOver()) {
+                m_sandBoard->start();
+            } else {
+                m_sandBoard->restart();
+            }
             m_sandBoard->setFocus();
         } else {
-            m_classicBoard->restart();
+            if (!m_classicBoard->isStarted() || m_classicBoard->isGameOver()) {
+                m_classicBoard->start();
+            } else {
+                m_classicBoard->restart();
+            }
             m_classicBoard->setFocus();
         }
     });
@@ -248,6 +256,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_sandBoard, &SandTetrisBoard::nextPieceChanged, this, [this](const Piece &p) { if (m_isSandMode) m_nextWidget->setPiece(p); });
     connect(m_sandBoard, &SandTetrisBoard::holdPieceChanged, this, [this](const Piece &p) { if (m_isSandMode) m_holdWidget->setPiece(p); });
 
+    // Inicializar ambos tableros en modo de espera
+    m_classicBoard->resetToStandby();
+    m_sandBoard->resetToStandby();
+
     setFixedSize(sizeHint());
 }
 
@@ -263,10 +275,13 @@ void MainWindow::switchToClassicMode() {
     m_linesTitle->setText("LÍNEAS");
     m_highScoreLabel->setText(QString::number(m_classicBoard->getHighScore()));
 
+    m_holdWidget->setSandMode(false);
+    m_nextWidget->setSandMode(false);
+
     m_sandBoard->pause();
     m_boardStack->setCurrentIndex(0);
+    m_classicBoard->resetToStandby();
     m_classicBoard->setFocus();
-    m_classicBoard->restart();
 }
 
 void MainWindow::switchToSandMode() {
@@ -281,10 +296,13 @@ void MainWindow::switchToSandMode() {
     m_linesTitle->setText("DISOLUCIONES");
     m_highScoreLabel->setText(QString::number(m_sandBoard->getHighScore()));
 
+    m_holdWidget->setSandMode(true);
+    m_nextWidget->setSandMode(true);
+
     m_classicBoard->pause();
     m_boardStack->setCurrentIndex(1);
+    m_sandBoard->resetToStandby();
     m_sandBoard->setFocus();
-    m_sandBoard->restart();
 }
 
 void MainWindow::updateScore(int score) {

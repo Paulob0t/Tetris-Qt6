@@ -149,6 +149,42 @@ void TetrisBoard::restart() {
     start();
 }
 
+void TetrisBoard::resetToStandby() {
+    m_dropTimer.stop();
+    m_isStarted = false;
+    m_isPaused = false;
+    m_isGameOver = false;
+    m_isCountingDown = false;
+    m_isClearingAnimation = false;
+    m_isLocking = false;
+    m_score = 0;
+    m_linesCleared = 0;
+    m_level = 1;
+    m_canHold = true;
+    m_holdPiece = Piece(TetrominoType::None);
+    m_particles.clear();
+    m_floatingTexts.clear();
+
+    for (auto &row : m_board) {
+        row.fill(TetrominoType::None);
+    }
+
+    emit scoreChanged(m_score);
+    emit highScoreChanged(m_highScore);
+    emit linesChanged(m_linesCleared);
+    emit levelChanged(m_level);
+    emit levelProgressChanged(0, PointsPerLevel);
+    emit holdPieceChanged(m_holdPiece);
+
+    refillBag(true);
+    m_nextPiece = Piece(takeFromBag());
+    m_currentPiece = Piece(takeFromBag());
+    m_currentPiece.setPosition(3, 0);
+    emit nextPieceChanged(m_nextPiece);
+
+    update();
+}
+
 int TetrisBoard::getDropInterval() const {
     int interval = 500 - (m_level - 1) * 45;
     return std::max(interval, 70);

@@ -124,7 +124,41 @@ void SandTetrisBoard::start() {
     m_isCountingDown = true;
     m_countdownMs = 0.0f;
     m_countdownStep = 3;
-    addFloatingText("3", width() / 2.0f, height() / 2.0f - 30, QColor(100, 215, 230), 32);
+    addFloatingText("3", width() / 2.0f, height() / 2.0f - 30, QColor(90, 165, 255), 32);
+}
+
+void SandTetrisBoard::resetToStandby() {
+    m_dropTimer.stop();
+    m_isStarted = false;
+    m_isPaused = false;
+    m_isGameOver = false;
+    m_isCountingDown = false;
+    m_score = 0;
+    m_clearsCount = 0;
+    m_level = 1;
+    m_canHold = true;
+    m_holdPiece = Piece(TetrominoType::None);
+    m_particles.clear();
+    m_floatingTexts.clear();
+
+    for (auto &row : m_sand) {
+        row.fill(0);
+    }
+
+    emit scoreChanged(m_score);
+    emit highScoreChanged(m_highScore);
+    emit linesChanged(m_clearsCount);
+    emit levelChanged(m_level);
+    emit levelProgressChanged(0, PointsPerLevel);
+    emit holdPieceChanged(m_holdPiece);
+
+    refillBag(true);
+    m_nextPiece = Piece(takeFromBag());
+    m_currentPiece = Piece(takeFromBag());
+    m_currentPiece.setPosition(3, 0);
+    emit nextPieceChanged(m_nextPiece);
+
+    update();
 }
 
 void SandTetrisBoard::pause() {
@@ -185,7 +219,7 @@ void SandTetrisBoard::spawnPiece() {
         m_isGameOver = true;
         m_dropTimer.stop();
         triggerScreenShake(10.0f);
-        addFloatingText("GAME OVER", width() / 2.0f, height() / 2.0f - 20, QColor(250, 140, 160), 26);
+        addFloatingText("GAME OVER", width() / 2.0f, height() / 2.0f - 20, QColor(250, 115, 135), 26);
         emit gameOverSignal();
     }
 }
@@ -197,7 +231,6 @@ bool SandTetrisBoard::tryMovePiece(int newBlockX, int newBlockY, int newRotation
                 int bx = newBlockX + c;
                 int by = newBlockY + r;
 
-                // Límites de bloques
                 if (bx < 0 || bx >= 10 || by >= 20) {
                     return false;
                 }
@@ -205,7 +238,6 @@ bool SandTetrisBoard::tryMovePiece(int newBlockX, int newBlockY, int newRotation
                 int grainX = bx * BlockGrainScale;
                 int grainY = by * BlockGrainScale;
 
-                // Comprobar colisión con los granos de arena
                 for (int gy = 0; gy < BlockGrainScale; ++gy) {
                     int py = grainY + gy;
                     if (py < 0) continue;
@@ -216,7 +248,7 @@ bool SandTetrisBoard::tryMovePiece(int newBlockX, int newBlockY, int newRotation
                         if (px < 0 || px >= SandWidth) return false;
 
                         if (m_sand[py][px] != 0) {
-                            return false; // Colisionó con arena existente
+                            return false;
                         }
                     }
                 }
@@ -227,7 +259,8 @@ bool SandTetrisBoard::tryMovePiece(int newBlockX, int newBlockY, int newRotation
 }
 
 void SandTetrisBoard::meltPieceIntoSand() {
-    uint8_t colorId = static_cast<uint8_t>(m_currentPiece.getType());
+    // Usar la paleta de 4 colores de alto contraste para la arena
+    uint8_t colorId = Piece::getSandColorId(m_currentPiece.getType());
 
     for (int r = 0; r < 4; ++r) {
         for (int c = 0; c < 4; ++c) {
@@ -253,8 +286,7 @@ void SandTetrisBoard::meltPieceIntoSand() {
         }
     }
 
-    // Pequeñas chispas del impacto de la arena
-    QColor col = Piece::getColorForType(m_currentPiece.getType());
+    QColor col = Piece::getSandColorForType(m_currentPiece.getType());
     float impactX = (m_currentPiece.getX() + 1.5f) * 32.0f;
     float impactY = (m_currentPiece.getY() + 3.0f) * 32.0f;
     spawnParticlesAt(impactX, impactY, col, 10, 2.5f);
@@ -292,7 +324,7 @@ void SandTetrisBoard::hardDrop() {
 }
 
 void SandTetrisBoard::updateSandPhysics() {
-    // 2 subpasos de simulación de arena por frame para que fluya natural
+    // 2 subpasos de simulación de arena por frame para flujo natural y rápido
     for (int step = 0; step < 2; ++step) {
         bool leftToRight = (QRandomGenerator::global()->generateDouble() > 0.5);
         int startCol = leftToRight ? 0 : (SandWidth - 1);
@@ -331,8 +363,9 @@ void SandTetrisBoard::updateSandPhysics() {
 }
 
 void SandTetrisBoard::checkSandClears() {
-    // Regla de Sandtrix: si la arena del mismo color conecta el borde izquierdo con el derecho, se disuelve!
-    for (uint8_t colId = 1; colId <= 7; ++colId) {
+    // Regla de Sandtrix con los 4 colores de arena:
+    // Si la arena del mismo color conecta de pared a pared (x=0 a x=79), ¡toda la arena conectada se disuelve!
+    for (uint8_t colId = 1; colId <= 4; ++colId) {
         std::vector<std::pair<int, int>> startNodes;
         for (int y = 0; y < SandHeight; ++y) {
             if (m_sand[y][0] == colId) {
@@ -363,7 +396,6 @@ void SandTetrisBoard::checkSandClears() {
                     reachedRight = true;
                 }
 
-                // 8 direcciones vecinas (los granos de arena se tocan diagonal y ortogonalmente)
                 static const int dx[] = {-1, 0, 1, -1, 1, -1, 0, 1};
                 static const int dy[] = {-1, -1, -1, 0, 0, 1, 1, 1};
 
@@ -387,11 +419,11 @@ void SandTetrisBoard::checkSandClears() {
 
         if (!toClear.empty()) {
             int grainsCount = static_cast<int>(toClear.size());
-            QColor grainColor = Piece::getColorForType(static_cast<TetrominoType>(colId));
+            QColor grainColor = Piece::getSandColorById(colId);
 
             for (auto &[gx, gy] : toClear) {
-                m_sand[gy][gx] = 0; // Se disuelve el grano
-                if (QRandomGenerator::global()->bounded(12) == 0) {
+                m_sand[gy][gx] = 0;
+                if (QRandomGenerator::global()->bounded(10) == 0) {
                     spawnParticlesAt(gx * GrainSize + GrainSize / 2.0f,
                                      gy * GrainSize + GrainSize / 2.0f,
                                      grainColor, 1, 3.0f);
@@ -448,11 +480,11 @@ void SandTetrisBoard::onAnimationFrame() {
             m_countdownStep--;
 
             if (m_countdownStep == 2) {
-                addFloatingText("2", width() / 2.0f, height() / 2.0f - 30, QColor(135, 175, 245), 32);
+                addFloatingText("2", width() / 2.0f, height() / 2.0f - 30, QColor(90, 165, 255), 32);
             } else if (m_countdownStep == 1) {
-                addFloatingText("1", width() / 2.0f, height() / 2.0f - 30, QColor(255, 225, 130), 32);
+                addFloatingText("1", width() / 2.0f, height() / 2.0f - 30, QColor(250, 210, 85), 32);
             } else if (m_countdownStep == 0) {
-                addFloatingText("¡ARENA!", width() / 2.0f, height() / 2.0f - 30, QColor(255, 225, 130), 32);
+                addFloatingText("¡ARENA!", width() / 2.0f, height() / 2.0f - 30, QColor(85, 215, 145), 34);
             } else if (m_countdownStep < 0) {
                 m_isCountingDown = false;
                 m_dropTimer.start(getDropInterval(), this);
@@ -460,10 +492,8 @@ void SandTetrisBoard::onAnimationFrame() {
         }
     }
 
-    // Actualizar física de arena continuamente
     if (m_isStarted && !m_isPaused && !m_isGameOver) {
         updateSandPhysics();
-        // Verificar periódicamente si se formaron conexiones completas al caer la arena
         checkSandClears();
     }
 
@@ -590,39 +620,33 @@ void SandTetrisBoard::paintEvent(QPaintEvent *) {
         painter.translate(shakeX, shakeY);
     }
 
-    // 1. Dibujar los granos de arena acumulados
-    // Tabla de colores pastel
-    static const QColor sandColors[8] = {
-        QColor(0, 0, 0, 0),
-        Piece::getColorForType(TetrominoType::I),
-        Piece::getColorForType(TetrominoType::J),
-        Piece::getColorForType(TetrominoType::L),
-        Piece::getColorForType(TetrominoType::O),
-        Piece::getColorForType(TetrominoType::S),
-        Piece::getColorForType(TetrominoType::T),
-        Piece::getColorForType(TetrominoType::Z)
-    };
-
+    // 1. Dibujar los granos de arena acumulados con sutil variación textural
     for (int y = 0; y < SandHeight; ++y) {
         for (int x = 0; x < SandWidth; ++x) {
             uint8_t val = m_sand[y][x];
-            if (val > 0 && val <= 7) {
-                painter.fillRect(x * GrainSize, y * GrainSize, GrainSize, GrainSize, sandColors[val]);
+            if (val >= 1 && val <= 4) {
+                QColor grainColor = Piece::getSandColorById(val);
+                // Textura granulada suave
+                if (((x ^ y) & 1) != 0) {
+                    grainColor = grainColor.lighter(106);
+                } else {
+                    grainColor = grainColor.darker(106);
+                }
+                painter.fillRect(x * GrainSize, y * GrainSize, GrainSize, GrainSize, grainColor);
             }
         }
     }
 
     // 2. Dibujar la pieza activa cayendo
     if (m_isStarted && !m_isGameOver) {
-        // Encontrar posición fantasma de impacto
         int ghostY = m_currentPiece.getY();
         while (tryMovePiece(m_currentPiece.getX(), ghostY + 1, m_currentPiece.getRotation())) {
             ghostY++;
         }
 
-        QColor pieceColor = Piece::getColorForType(m_currentPiece.getType());
+        QColor pieceColor = Piece::getSandColorForType(m_currentPiece.getType());
 
-        // Pieza fantasma (outline punteado)
+        // Pieza fantasma
         painter.setRenderHint(QPainter::Antialiasing, true);
         for (int r = 0; r < 4; ++r) {
             for (int c = 0; c < 4; ++c) {
@@ -707,15 +731,15 @@ void SandTetrisBoard::paintEvent(QPaintEvent *) {
         if (!m_isStarted) {
             mainText = "TETRIS ARENA";
             subText = "Física de arena activa\nESPACIO para jugar";
-            mainColor = QColor(255, 225, 130);
+            mainColor = QColor(250, 210, 85);
         } else if (m_isGameOver) {
             mainText = "GAME OVER";
             subText = "Presiona 'R' para reiniciar";
-            mainColor = QColor(250, 140, 160);
+            mainColor = QColor(250, 115, 135);
         } else if (m_isPaused) {
             mainText = "PAUSA";
             subText = "Presiona 'P' para continuar";
-            mainColor = QColor(255, 225, 130);
+            mainColor = QColor(250, 210, 85);
         }
 
         painter.setPen(mainColor);

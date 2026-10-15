@@ -44,10 +44,12 @@ public:
     void start();
     void pause();
     void restart();
+    void resetToStandby();
     void holdCurrentPiece();
 
     bool isPaused() const { return m_isPaused; }
     bool isGameOver() const { return m_isGameOver; }
+    bool isStarted() const { return m_isStarted; }
     int getHighScore() const { return m_highScore; }
 
 signals:
@@ -69,11 +71,9 @@ private slots:
     void onAnimationFrame();
 
 private:
-    // Simulación de física de arena cayendo
     void updateSandPhysics();
     void checkSandClears();
 
-    // Lógica de pieza activa
     bool tryMovePiece(int newBlockX, int newBlockY, int newRotation);
     void meltPieceIntoSand();
     void spawnPiece();
@@ -82,20 +82,16 @@ private:
     void addScore(int pointsToAdd);
     int getDropInterval() const;
 
-    // 7-Bag
     void refillBag(bool isFirstBag);
     TetrominoType takeFromBag();
 
-    // Efectos
     void triggerScreenShake(float intensity);
     void spawnParticlesAt(float x, float y, const QColor &color, int count, float speed);
     void addFloatingText(const QString &text, float x, float y, const QColor &color, int size = 16);
 
-    // Relojes
     QBasicTimer m_dropTimer;
     QTimer m_animTimer;
 
-    // Estado
     bool m_isStarted{false};
     bool m_isPaused{false};
     bool m_isGameOver{false};
@@ -110,12 +106,11 @@ private:
     Piece m_holdPiece;
     bool m_canHold{true};
 
-    // Cuenta regresiva
     bool m_isCountingDown{false};
     float m_countdownMs{0.0f};
     int m_countdownStep{3};
 
-    // Matriz de arena: 0 = vacío, 1..7 = color del tetrominó
+    // Matriz de arena: 0 = vacío, 1..4 = color de arena
     std::array<std::array<uint8_t, SandWidth>, SandHeight> m_sand;
 
     std::vector<TetrominoType> m_bag;

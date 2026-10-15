@@ -99,7 +99,7 @@ bool Piece::isBlockAt(int row, int col, int rotation) const {
   return (*baseShape)[srcRow][srcCol] == 1;
 }
 
-// Paleta de colores pastel suaves y modernos (sin gradientes)
+// Paleta clásica pastel (7 colores distintos)
 QColor Piece::getColorForType(TetrominoType type) {
   switch (type) {
   case TetrominoType::I:
@@ -119,6 +119,46 @@ QColor Piece::getColorForType(TetrominoType type) {
   default:
     return QColor(45, 48, 60);
   }
+}
+
+// En el Modo Arena, usamos 4 colores principales de alto contraste.
+// Esto permite que la arena del mismo color se conecte de lado a lado con facilidad
+// produciendo cadenas y combos fluidos como en Sandtrix.
+uint8_t Piece::getSandColorId(TetrominoType type) {
+  switch (type) {
+  case TetrominoType::I:
+  case TetrominoType::J:
+    return 1; // Azul
+  case TetrominoType::O:
+  case TetrominoType::L:
+    return 2; // Amarillo
+  case TetrominoType::S:
+    return 3; // Verde
+  case TetrominoType::Z:
+  case TetrominoType::T:
+    return 4; // Coral / Rosa
+  default:
+    return 0;
+  }
+}
+
+QColor Piece::getSandColorById(uint8_t colorId) {
+  switch (colorId) {
+  case 1:
+    return QColor(90, 165, 255);  // Azul Océano
+  case 2:
+    return QColor(250, 210, 85);  // Amarillo Arena
+  case 3:
+    return QColor(85, 215, 145);  // Verde Menta
+  case 4:
+    return QColor(250, 115, 135); // Coral / Rosa Rubí
+  default:
+    return QColor(0, 0, 0, 0);
+  }
+}
+
+QColor Piece::getSandColorForType(TetrominoType type) {
+  return getSandColorById(getSandColorId(type));
 }
 
 Piece Piece::getRandomPiece() {

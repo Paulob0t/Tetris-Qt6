@@ -36,17 +36,19 @@ public:
     static constexpr int BoardWidth = 10;
     static constexpr int BoardHeight = 20;
     static constexpr int BlockSize = 32;
-    static constexpr int PointsPerLevel = 1000; // Cada 1000 puntos se sube de nivel
+    static constexpr int PointsPerLevel = 1000;
 
     explicit TetrisBoard(QWidget *parent = nullptr);
 
     void start();
     void pause();
     void restart();
+    void resetToStandby();
     void holdCurrentPiece();
 
     bool isPaused() const { return m_isPaused; }
     bool isGameOver() const { return m_isGameOver; }
+    bool isStarted() const { return m_isStarted; }
     int getHighScore() const { return m_highScore; }
 
 signals:
