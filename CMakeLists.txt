@@ -16,6 +16,8 @@ add_executable(TetrisQt6
     src/Piece.cpp
     src/TetrisBoard.h
     src/TetrisBoard.cpp
+    src/SandTetrisBoard.h
+    src/SandTetrisBoard.cpp
     src/PiecePreviewWidget.h
     src/MainWindow.h
     src/MainWindow.cpp

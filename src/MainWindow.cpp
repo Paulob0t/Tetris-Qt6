@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "TetrisBoard.h"
+#include "SandTetrisBoard.h"
 #include "PiecePreviewWidget.h"
 
 #include <QHBoxLayout>
@@ -11,7 +12,7 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent) {
-    setWindowTitle("Tetris Qt6 - Pastel Edition (Linux & Windows)");
+    setWindowTitle("Tetris Qt6 - Clásico & Modo Arena (Linux & Windows)");
 
     setStyleSheet(R"(
         QMainWindow {
@@ -22,19 +23,34 @@ MainWindow::MainWindow(QWidget *parent)
             font-family: 'Segoe UI', 'Ubuntu', 'DejaVu Sans', sans-serif;
         }
         QPushButton {
+            background-color: #2E344A;
+            color: #D0D5E6;
+            border: 1px solid #404866;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        QPushButton:hover {
+            background-color: #3C4460;
+        }
+        QPushButton:pressed {
+            background-color: #24283A;
+        }
+        QPushButton#activeMode {
+            background-color: #4C567A;
+            color: #FFFFFF;
+            border: 1px solid #7080B0;
+        }
+        QPushButton#restartBtn {
             background-color: #3B4261;
             color: #FFFFFF;
             border: 1px solid #4C567A;
-            border-radius: 8px;
             padding: 10px 16px;
-            font-weight: 600;
             font-size: 13px;
         }
-        QPushButton:hover {
+        QPushButton#restartBtn:hover {
             background-color: #495278;
-        }
-        QPushButton:pressed {
-            background-color: #2F354F;
         }
         QFrame.card {
             background-color: #1A1C28;
@@ -59,15 +75,35 @@ MainWindow::MainWindow(QWidget *parent)
     mainLayout->setSpacing(20);
 
     // ==========================================
-    // PANEL IZQUIERDO: HOLD & CONTROLES
+    // PANEL IZQUIERDO: SELECTOR DE MODO, HOLD & CONTROLES
     // ==========================================
     auto *leftPanel = new QFrame(this);
     leftPanel->setProperty("class", "card");
-    leftPanel->setFixedWidth(160);
+    leftPanel->setFixedWidth(165);
 
     auto *leftLayout = new QVBoxLayout(leftPanel);
     leftLayout->setContentsMargins(15, 15, 15, 15);
-    leftLayout->setSpacing(10);
+    leftLayout->setSpacing(8);
+
+    auto *modeTitle = new QLabel("MODO DE JUEGO", leftPanel);
+    modeTitle->setStyleSheet("font-size: 10px; font-weight: bold; color: #7A819E; letter-spacing: 1px;");
+    modeTitle->setAlignment(Qt::AlignCenter);
+    leftLayout->addWidget(modeTitle);
+
+    auto *modeLayout = new QHBoxLayout();
+    modeLayout->setSpacing(6);
+
+    m_btnClassicMode = new QPushButton("Clásico", leftPanel);
+    m_btnClassicMode->setObjectName("activeMode");
+    connect(m_btnClassicMode, &QPushButton::clicked, this, &MainWindow::switchToClassicMode);
+    modeLayout->addWidget(m_btnClassicMode);
+
+    m_btnSandMode = new QPushButton("Arena", leftPanel);
+    connect(m_btnSandMode, &QPushButton::clicked, this, &MainWindow::switchToSandMode);
+    modeLayout->addWidget(m_btnSandMode);
+
+    leftLayout->addLayout(modeLayout);
+    leftLayout->addSpacing(10);
 
     auto *holdTitle = new QLabel("HOLD", leftPanel);
     holdTitle->setStyleSheet("font-size: 11px; font-weight: bold; color: #7A819E; letter-spacing: 1px;");
@@ -77,7 +113,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_holdWidget = new PiecePreviewWidget(leftPanel);
     leftLayout->addWidget(m_holdWidget, 0, Qt::AlignCenter);
 
-    leftLayout->addSpacing(20);
+    leftLayout->addSpacing(15);
 
     auto *controlsTitle = new QLabel("CONTROLES", leftPanel);
     controlsTitle->setStyleSheet("font-size: 11px; font-weight: bold; color: #7A819E; letter-spacing: 1px;");
@@ -99,10 +135,15 @@ MainWindow::MainWindow(QWidget *parent)
     mainLayout->addWidget(leftPanel);
 
     // ==========================================
-    // CENTRO: TABLERO DE TETRIS
+    // CENTRO: STACK DE TABLEROS (CLÁSICO vs ARENA)
     // ==========================================
-    m_board = new TetrisBoard(this);
-    mainLayout->addWidget(m_board);
+    m_boardStack = new QStackedWidget(this);
+    m_classicBoard = new TetrisBoard(this);
+    m_sandBoard = new SandTetrisBoard(this);
+
+    m_boardStack->addWidget(m_classicBoard);
+    m_boardStack->addWidget(m_sandBoard);
+    mainLayout->addWidget(m_boardStack);
 
     // ==========================================
     // PANEL DERECHO: NEXT, PUNTUACIÓN, NIVELES
@@ -130,7 +171,7 @@ MainWindow::MainWindow(QWidget *parent)
     highScoreTitle->setStyleSheet("font-size: 10px; font-weight: bold; color: #7A819E; letter-spacing: 1px;");
     rightLayout->addWidget(highScoreTitle);
 
-    m_highScoreLabel = new QLabel(QString::number(m_board->getHighScore()), rightPanel);
+    m_highScoreLabel = new QLabel(QString::number(m_classicBoard->getHighScore()), rightPanel);
     m_highScoreLabel->setStyleSheet("font-size: 20px; font-weight: bold; color: #FA8CA0;");
     rightLayout->addWidget(m_highScoreLabel);
 
@@ -144,9 +185,9 @@ MainWindow::MainWindow(QWidget *parent)
     rightLayout->addWidget(m_scoreLabel);
 
     // Líneas
-    auto *linesTitle = new QLabel("LÍNEAS", rightPanel);
-    linesTitle->setStyleSheet("font-size: 10px; font-weight: bold; color: #7A819E; letter-spacing: 1px;");
-    rightLayout->addWidget(linesTitle);
+    m_linesTitle = new QLabel("LÍNEAS", rightPanel);
+    m_linesTitle->setStyleSheet("font-size: 10px; font-weight: bold; color: #7A819E; letter-spacing: 1px;");
+    rightLayout->addWidget(m_linesTitle);
 
     m_linesLabel = new QLabel("0", rightPanel);
     m_linesLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #FFB482;");
@@ -174,25 +215,76 @@ MainWindow::MainWindow(QWidget *parent)
     rightLayout->addStretch();
 
     m_restartButton = new QPushButton("Reiniciar (R)", rightPanel);
+    m_restartButton->setObjectName("restartBtn");
     connect(m_restartButton, &QPushButton::clicked, [this]() {
-        m_board->restart();
-        m_board->setFocus();
+        if (m_isSandMode) {
+            m_sandBoard->restart();
+            m_sandBoard->setFocus();
+        } else {
+            m_classicBoard->restart();
+            m_classicBoard->setFocus();
+        }
     });
     rightLayout->addWidget(m_restartButton);
 
     mainLayout->addWidget(rightPanel);
     setCentralWidget(centralWidget);
 
-    // Conectar señales del tablero
-    connect(m_board, &TetrisBoard::scoreChanged, this, &MainWindow::updateScore);
-    connect(m_board, &TetrisBoard::highScoreChanged, this, &MainWindow::updateHighScore);
-    connect(m_board, &TetrisBoard::linesChanged, this, &MainWindow::updateLines);
-    connect(m_board, &TetrisBoard::levelChanged, this, &MainWindow::updateLevel);
-    connect(m_board, &TetrisBoard::levelProgressChanged, this, &MainWindow::updateLevelProgress);
-    connect(m_board, &TetrisBoard::nextPieceChanged, m_nextWidget, &PiecePreviewWidget::setPiece);
-    connect(m_board, &TetrisBoard::holdPieceChanged, m_holdWidget, &PiecePreviewWidget::setPiece);
+    // Conectar señales del Tablero Clásico
+    connect(m_classicBoard, &TetrisBoard::scoreChanged, this, [this](int s) { if (!m_isSandMode) updateScore(s); });
+    connect(m_classicBoard, &TetrisBoard::highScoreChanged, this, [this](int hs) { if (!m_isSandMode) updateHighScore(hs); });
+    connect(m_classicBoard, &TetrisBoard::linesChanged, this, [this](int l) { if (!m_isSandMode) updateLines(l); });
+    connect(m_classicBoard, &TetrisBoard::levelChanged, this, [this](int lvl) { if (!m_isSandMode) updateLevel(lvl); });
+    connect(m_classicBoard, &TetrisBoard::levelProgressChanged, this, [this](int c, int t) { if (!m_isSandMode) updateLevelProgress(c, t); });
+    connect(m_classicBoard, &TetrisBoard::nextPieceChanged, this, [this](const Piece &p) { if (!m_isSandMode) m_nextWidget->setPiece(p); });
+    connect(m_classicBoard, &TetrisBoard::holdPieceChanged, this, [this](const Piece &p) { if (!m_isSandMode) m_holdWidget->setPiece(p); });
+
+    // Conectar señales del Tablero de Arena
+    connect(m_sandBoard, &SandTetrisBoard::scoreChanged, this, [this](int s) { if (m_isSandMode) updateScore(s); });
+    connect(m_sandBoard, &SandTetrisBoard::highScoreChanged, this, [this](int hs) { if (m_isSandMode) updateHighScore(hs); });
+    connect(m_sandBoard, &SandTetrisBoard::linesChanged, this, [this](int l) { if (m_isSandMode) updateLines(l); });
+    connect(m_sandBoard, &SandTetrisBoard::levelChanged, this, [this](int lvl) { if (m_isSandMode) updateLevel(lvl); });
+    connect(m_sandBoard, &SandTetrisBoard::levelProgressChanged, this, [this](int c, int t) { if (m_isSandMode) updateLevelProgress(c, t); });
+    connect(m_sandBoard, &SandTetrisBoard::nextPieceChanged, this, [this](const Piece &p) { if (m_isSandMode) m_nextWidget->setPiece(p); });
+    connect(m_sandBoard, &SandTetrisBoard::holdPieceChanged, this, [this](const Piece &p) { if (m_isSandMode) m_holdWidget->setPiece(p); });
 
     setFixedSize(sizeHint());
+}
+
+void MainWindow::switchToClassicMode() {
+    if (!m_isSandMode) return;
+    m_isSandMode = false;
+
+    m_btnClassicMode->setObjectName("activeMode");
+    m_btnSandMode->setObjectName("");
+    m_btnClassicMode->setStyle(m_btnClassicMode->style());
+    m_btnSandMode->setStyle(m_btnSandMode->style());
+
+    m_linesTitle->setText("LÍNEAS");
+    m_highScoreLabel->setText(QString::number(m_classicBoard->getHighScore()));
+
+    m_sandBoard->pause();
+    m_boardStack->setCurrentIndex(0);
+    m_classicBoard->setFocus();
+    m_classicBoard->restart();
+}
+
+void MainWindow::switchToSandMode() {
+    if (m_isSandMode) return;
+    m_isSandMode = true;
+
+    m_btnSandMode->setObjectName("activeMode");
+    m_btnClassicMode->setObjectName("");
+    m_btnSandMode->setStyle(m_btnSandMode->style());
+    m_btnClassicMode->setStyle(m_btnClassicMode->style());
+
+    m_linesTitle->setText("DISOLUCIONES");
+    m_highScoreLabel->setText(QString::number(m_sandBoard->getHighScore()));
+
+    m_classicBoard->pause();
+    m_boardStack->setCurrentIndex(1);
+    m_sandBoard->setFocus();
+    m_sandBoard->restart();
 }
 
 void MainWindow::updateScore(int score) {

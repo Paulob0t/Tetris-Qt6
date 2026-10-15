@@ -6,11 +6,14 @@ Una implementación moderna, fluida y multiplataforma del clásico **Tetris** de
 
 ## ✨ Características
 
+* **Modos de Juego (Clásico & Arena):**
+  * **Modo Clásico:** El Tetris tradicional competitivo con 7-Bag y Lock Delay.
+  * **Modo Arena (Sand Tetris):** Las piezas se derriten en miles de granos de arena con física de autómatas celulares. Si una cadena continua del mismo color conecta el borde izquierdo con el derecho, ¡toda la arena conectada se disuelve!
 * **Paleta Pastel Minimalista:** Diseño limpio y moderno con tonos pastel suaves que no cansan la vista.
 * **Fluidez a 60 FPS:** Motor de renderizado desacoplado de la velocidad de caída para animaciones ultrasuaves.
-* **Algoritmo 7-Bag Randomizer:** Generación oficial mediante bolsas de 7 piezas barajadas con regla de inicio limpio (la primera pieza nunca será S, Z ni O).
+* **Subida de Nivel por Puntuación:** Barra de progreso interactiva en tiempo real; cada 1,000 puntos subes de nivel.
+* **Algoritmo 7-Bag Randomizer:** Generación oficial mediante bolsas de 7 piezas barajadas con regla de inicio limpio.
 * **Lock Delay (500 ms):** Tiempo de gracia al tocar el suelo para poder deslizar y rotar la pieza antes de fijarse.
-* **Cuenta Regresiva de Inicio:** Animación de preparación `3... 2... 1... ¡GO!` al comenzar la partida.
 * **Mecánica HOLD (Guardar pieza):** Guarda la pieza actual o intercámbiala en cualquier momento con `C` o `Shift`.
 * **Proyección Fantasma (*Ghost Piece*):** Guía visual punteada que indica la posición exacta de impacto.
 * **Efectos de Impacto (*Juice*):**
