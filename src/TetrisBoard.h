@@ -36,6 +36,7 @@ public:
     static constexpr int BoardWidth = 10;
     static constexpr int BoardHeight = 20;
     static constexpr int BlockSize = 32;
+    static constexpr int PointsPerLevel = 1000; // Cada 1000 puntos se sube de nivel
 
     explicit TetrisBoard(QWidget *parent = nullptr);
 
@@ -53,6 +54,7 @@ signals:
     void highScoreChanged(int highScore);
     void linesChanged(int lines);
     void levelChanged(int level);
+    void levelProgressChanged(int currentPoints, int targetPoints);
     void nextPieceChanged(const Piece &nextPiece);
     void holdPieceChanged(const Piece &holdPiece);
     void gameOverSignal();
@@ -63,11 +65,12 @@ protected:
     void timerEvent(QTimerEvent *event) override;
 
 private slots:
-    void onAnimationFrame(); // Bucle a 60 FPS
+    void onAnimationFrame();
 
 private:
     bool tryMove(const Piece &newPiece, int newX, int newY, int newRotation);
     bool isGrounded() const;
+    void addScore(int pointsToAdd);
     void lockPiece();
     void checkLines();
     void finalizeLineClear();
@@ -80,7 +83,7 @@ private:
     void refillBag(bool isFirstBag);
     TetrominoType takeFromBag();
 
-    // Lock Delay (Tiempo de gracia al tocar suelo)
+    // Lock Delay (Tiempo de gracia)
     void resetLockDelayIfGrounded();
     static constexpr float LockDelayMaxMs = 500.0f;
     static constexpr int LockMaxMoves = 15;
@@ -88,10 +91,10 @@ private:
     float m_lockTimerMs{0.0f};
     int m_lockMoveCount{0};
 
-    // Cuenta regresiva de inicio
+    // Cuenta regresiva
     bool m_isCountingDown{false};
     float m_countdownMs{0.0f};
-    int m_countdownStep{3}; // 3, 2, 1, 0 (GO)
+    int m_countdownStep{3};
 
     // Efectos visuales
     void triggerScreenShake(float intensity);
@@ -117,21 +120,14 @@ private:
     Piece m_holdPiece;
     bool m_canHold{true};
 
-    // Bolsa de 7 piezas
     std::vector<TetrominoType> m_bag;
-
-    // Tablero [fila][columna]
     std::array<std::array<TetrominoType, BoardWidth>, BoardHeight> m_board;
 
-    // Animación de líneas
     bool m_isClearingAnimation{false};
     float m_clearAnimProgress{0.0f};
     std::vector<int> m_animatingRows;
 
-    // Screen Shake
     float m_shakeIntensity{0.0f};
-
-    // Partículas y textos
     std::vector<Particle> m_particles;
     std::vector<FloatingText> m_floatingTexts;
 };

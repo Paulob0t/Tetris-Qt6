@@ -7,12 +7,12 @@
 #include <QFrame>
 #include <QLabel>
 #include <QPushButton>
+#include <QProgressBar>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent) {
     setWindowTitle("Tetris Qt6 - Pastel Edition (Linux & Windows)");
 
-    // Hoja de estilos Flat Pastel / Nord Theme
     setStyleSheet(R"(
         QMainWindow {
             background-color: #13141C;
@@ -40,6 +40,16 @@ MainWindow::MainWindow(QWidget *parent)
             background-color: #1A1C28;
             border-radius: 10px;
             border: 1px solid #282C40;
+        }
+        QProgressBar {
+            background-color: #202436;
+            border: 1px solid #2F3650;
+            border-radius: 4px;
+            height: 7px;
+        }
+        QProgressBar::chunk {
+            background-color: #96D7AA;
+            border-radius: 3px;
         }
     )");
 
@@ -99,11 +109,11 @@ MainWindow::MainWindow(QWidget *parent)
     // ==========================================
     auto *rightPanel = new QFrame(this);
     rightPanel->setProperty("class", "card");
-    rightPanel->setFixedWidth(170);
+    rightPanel->setFixedWidth(175);
 
     auto *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(15, 15, 15, 15);
-    rightLayout->setSpacing(10);
+    rightLayout->setSpacing(8);
 
     auto *nextTitle = new QLabel("SIGUIENTE", rightPanel);
     nextTitle->setStyleSheet("font-size: 11px; font-weight: bold; color: #7A819E; letter-spacing: 1px;");
@@ -113,7 +123,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_nextWidget = new PiecePreviewWidget(rightPanel);
     rightLayout->addWidget(m_nextWidget, 0, Qt::AlignCenter);
 
-    rightLayout->addSpacing(10);
+    rightLayout->addSpacing(8);
 
     // Récord
     auto *highScoreTitle = new QLabel("RÉCORD", rightPanel);
@@ -121,7 +131,7 @@ MainWindow::MainWindow(QWidget *parent)
     rightLayout->addWidget(highScoreTitle);
 
     m_highScoreLabel = new QLabel(QString::number(m_board->getHighScore()), rightPanel);
-    m_highScoreLabel->setStyleSheet("font-size: 20px; font-weight: bold; color: #FA8CA0;"); // Rosa pastel
+    m_highScoreLabel->setStyleSheet("font-size: 20px; font-weight: bold; color: #FA8CA0;");
     rightLayout->addWidget(m_highScoreLabel);
 
     // Puntuación
@@ -130,7 +140,7 @@ MainWindow::MainWindow(QWidget *parent)
     rightLayout->addWidget(scoreTitle);
 
     m_scoreLabel = new QLabel("0", rightPanel);
-    m_scoreLabel->setStyleSheet("font-size: 22px; font-weight: bold; color: #64D7E6;"); // Celeste pastel
+    m_scoreLabel->setStyleSheet("font-size: 22px; font-weight: bold; color: #64D7E6;");
     rightLayout->addWidget(m_scoreLabel);
 
     // Líneas
@@ -139,17 +149,27 @@ MainWindow::MainWindow(QWidget *parent)
     rightLayout->addWidget(linesTitle);
 
     m_linesLabel = new QLabel("0", rightPanel);
-    m_linesLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #FFB482;"); // Durazno pastel
+    m_linesLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #FFB482;");
     rightLayout->addWidget(m_linesLabel);
 
-    // Nivel
+    // Nivel con Barra de Progreso
     auto *levelTitle = new QLabel("NIVEL", rightPanel);
     levelTitle->setStyleSheet("font-size: 10px; font-weight: bold; color: #7A819E; letter-spacing: 1px;");
     rightLayout->addWidget(levelTitle);
 
     m_levelLabel = new QLabel("1", rightPanel);
-    m_levelLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #96D7AA;"); // Menta pastel
+    m_levelLabel->setStyleSheet("font-size: 20px; font-weight: bold; color: #96D7AA;");
     rightLayout->addWidget(m_levelLabel);
+
+    m_levelProgressBar = new QProgressBar(rightPanel);
+    m_levelProgressBar->setRange(0, TetrisBoard::PointsPerLevel);
+    m_levelProgressBar->setValue(0);
+    m_levelProgressBar->setTextVisible(false);
+    rightLayout->addWidget(m_levelProgressBar);
+
+    m_levelProgressLabel = new QLabel("0 / 1000 pts", rightPanel);
+    m_levelProgressLabel->setStyleSheet("font-size: 10px; color: #7A819E; font-weight: 500;");
+    rightLayout->addWidget(m_levelProgressLabel);
 
     rightLayout->addStretch();
 
@@ -168,6 +188,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_board, &TetrisBoard::highScoreChanged, this, &MainWindow::updateHighScore);
     connect(m_board, &TetrisBoard::linesChanged, this, &MainWindow::updateLines);
     connect(m_board, &TetrisBoard::levelChanged, this, &MainWindow::updateLevel);
+    connect(m_board, &TetrisBoard::levelProgressChanged, this, &MainWindow::updateLevelProgress);
     connect(m_board, &TetrisBoard::nextPieceChanged, m_nextWidget, &PiecePreviewWidget::setPiece);
     connect(m_board, &TetrisBoard::holdPieceChanged, m_holdWidget, &PiecePreviewWidget::setPiece);
 
@@ -188,4 +209,10 @@ void MainWindow::updateLines(int lines) {
 
 void MainWindow::updateLevel(int level) {
     m_levelLabel->setText(QString::number(level));
+}
+
+void MainWindow::updateLevelProgress(int currentPoints, int targetPoints) {
+    m_levelProgressBar->setMaximum(targetPoints);
+    m_levelProgressBar->setValue(currentPoints);
+    m_levelProgressLabel->setText(QString("%1 / %2 pts").arg(currentPoints).arg(targetPoints));
 }

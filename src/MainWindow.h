@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QLabel>
 #include <QPushButton>
+#include <QProgressBar>
 
 class TetrisBoard;
 class PiecePreviewWidget;
@@ -18,6 +19,7 @@ private slots:
     void updateHighScore(int highScore);
     void updateLines(int lines);
     void updateLevel(int level);
+    void updateLevelProgress(int currentPoints, int targetPoints);
 
 private:
     TetrisBoard *m_board;
@@ -28,5 +30,7 @@ private:
     QLabel *m_highScoreLabel;
     QLabel *m_linesLabel;
     QLabel *m_levelLabel;
+    QProgressBar *m_levelProgressBar;
+    QLabel *m_levelProgressLabel;
     QPushButton *m_restartButton;
 };
